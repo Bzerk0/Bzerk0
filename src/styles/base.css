@@ -6,7 +6,6 @@
 @import '@fontsource/tilt-neon/latin-400.css';
 @import '@fontsource-variable/inter/wght.css';
 @import '@fontsource/micro-5/latin-400.css';
-@import '@fontsource-variable/doto/wght.css';
 
 :root {
   /* ---- Colors. Change them here; src/constants.js mirrors them for the 3D scene. ---- */
@@ -26,7 +25,6 @@
   --font-neon: 'Tilt Neon', 'Inter Variable', sans-serif; /* the sign (home page only) */
   --font-body: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-label: 'Micro 5', ui-monospace, monospace; /* home page menu and small labels */
-  --font-loader: 'Doto Variable', ui-monospace, monospace; /* loading screen */
 
   /* ---- Spacing scale (multiples of 8px) ---- */
   --s1: 8px;

@@ -1,8 +1,7 @@
 // Entry point for the home page ("/").
-// Decides between the 3D arcade and the simple 2D landing, then runs the loading screen.
+// Decides between the 3D arcade and the simple 2D landing, then starts it.
 import './ui/nav.js';
 import projects from './data/projects.json';
-import { createLoader } from './scene/loader.js';
 
 const root = document.documentElement;
 
@@ -31,23 +30,19 @@ async function start3D() {
   const hiddenLinks = document.querySelectorAll('#main a');
   hiddenLinks.forEach((a) => (a.tabIndex = -1));
 
-  // Loading jobs: the 3D code, 3 fonts, one image per project, and the shader warm-up.
-  const loader = createLoader(1 + 3 + projects.length + 1);
-  const track = (promise) => promise.finally(loader.step);
-
   try {
     // The fonts must be ready before the sign and marquees are painted.
-    const fonts = Promise.all(['"Press Start 2P"', '"Tilt Neon"', '"Inter Variable"'].map((f) => track(document.fonts.load(`16px ${f}`))));
-    // Three.js is big, so it is downloaded separately, after the loading screen is already visible.
-    const { createArcade } = await track(import('./scene/arcade.js'));
+    const fonts = Promise.all(['"Press Start 2P"', '"Tilt Neon"', '"Inter Variable"'].map((f) => document.fonts.load(`16px ${f}`)));
+    // Three.js is big, so it is downloaded separately. The page stays black until the scene is ready.
+    const { createArcade } = await import('./scene/arcade.js');
     await fonts;
-    const arcade = await createArcade({ canvas: document.getElementById('scene'), projects, step: loader.step });
+    const arcade = await createArcade({ canvas: document.getElementById('scene'), projects });
 
     // "/#some-project" means we're coming back from a project page: skip the street.
-    const slug = location.hash.slice(1);
-    if (!projects.some((p) => p.slug === slug)) await loader.waitForStart();
-    await loader.hide();
-    arcade.begin(slug);
+    arcade.begin(location.hash.slice(1));
+    const cover = document.getElementById('cover');
+    cover.classList.add('is-done'); // fade the black cover away
+    cover.addEventListener('transitionend', () => (cover.hidden = true), { once: true });
   } catch (error) {
     console.error('3D failed to start, showing the 2D site instead.', error);
     hiddenLinks.forEach((a) => a.removeAttribute('tabindex'));

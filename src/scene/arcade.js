@@ -1,6 +1,6 @@
 // The 3D experience: sets up Three.js, draws every frame, and reacts to input.
 // It moves through a few states:
-//   'waiting'  loading screen is still up
+//   'waiting'  still loading (the page is black)
 //   'outside'  on the street, looking at the sign
 //   'inside'   in front of a cabinet
 //   'busy'     a transition is playing (input is ignored)
@@ -20,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 const FOV = 50;
 const TAN = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
 
-export async function createArcade({ canvas, projects, step }) {
+export async function createArcade({ canvas, projects }) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
 
@@ -37,7 +37,7 @@ export async function createArcade({ canvas, projects, step }) {
   const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400); // far enough to reach the stars
 
   const exterior = await createExterior({ lite: mobile, flicker: !reduced });
-  const interior = await createInterior({ projects, lite: mobile, step });
+  const interior = await createInterior({ projects, lite: mobile });
   scene.add(exterior.group, interior.group);
 
   // ---- Bloom: makes anything brighter than white glow (the neon). HTML text is never affected. ----
@@ -109,14 +109,13 @@ export async function createArcade({ canvas, projects, step }) {
       if (frames === 90 && slowFrames > 45) useBloom = false;
     }
   }
-  // Warm up: compile all the shaders now (part of the loading bar) so the first transition is smooth.
+  // Warm up: compile all the shaders now so the first transition is smooth.
   // (Once per scene, because each one has its own set of lights.)
   exterior.group.visible = false;
   await renderer.compileAsync(scene, camera);
   exterior.group.visible = true;
   interior.group.visible = false;
   await renderer.compileAsync(scene, camera);
-  step();
   renderer.setAnimationLoop(frame);
   // Stop drawing while the tab is in the background.
   document.addEventListener('visibilitychange', () => renderer.setAnimationLoop(document.hidden ? null : frame));
@@ -259,7 +258,7 @@ export async function createArcade({ canvas, projects, step }) {
     setState('inside');
   });
 
-  // ---- Start. Called by main.js once the loading screen is dismissed. ----
+  // ---- Start. Called by main.js once everything has loaded. ----
   // With a project slug (coming back from a project page) we go straight to that cabinet.
   function begin(slug) {
     const startIndex = projects.findIndex((p) => p.slug === slug);

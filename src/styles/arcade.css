@@ -1,4 +1,4 @@
-/* The home page: the 3D canvas, the text drawn over it, the loading screen, and the 2D landing. */
+/* The home page: the 3D canvas, the text drawn over it, and the 2D landing. */
 
 /* ---- 3D mode (JavaScript on and WebGL available) ---- */
 .js:not(.no-webgl) .arcade {
@@ -36,39 +36,18 @@
   background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgb(0 0 0 / 0.6) 100%);
 }
 
-/* ---- Loading screen ---- */
-.loader {
+/* ---- Black cover over the scene until it is ready ---- */
+.cover {
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: grid;
-  place-content: center;
   background: #000;
   transition: opacity 700ms var(--ease);
 }
 
-.loader.is-done {
+.cover.is-done {
   opacity: 0;
   pointer-events: none;
-}
-
-.loader__text {
-  padding: var(--s2);
-  border: 0;
-  background: none;
-  font: 800 clamp(1.125rem, 3.4vw, 1.75rem) / 1.4 var(--font-loader);
-  letter-spacing: 0.06em;
-  color: var(--text);
-  text-align: center;
-}
-
-.loader__start {
-  cursor: pointer;
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-.loader__start:hover {
-  color: var(--cyan);
 }
 
 @keyframes pulse {
@@ -81,7 +60,7 @@
 .hud {
   position: fixed;
   inset: 0;
-  z-index: 41; /* above the loading screen, so the skip link is there from the first moment */
+  z-index: 41; /* above the cover, so the skip link is there from the first moment */
   pointer-events: none; /* clicks pass through to the canvas... */
 }
 
@@ -227,10 +206,10 @@
 .no-webgl #scene,
 .no-webgl .vignette,
 html:not(.js) .vignette,
-.no-webgl .loader,
+.no-webgl .cover,
 .no-webgl .hud,
 html:not(.js) #scene,
-html:not(.js) .loader,
+html:not(.js) .cover,
 html:not(.js) .hud {
   display: none;
 }

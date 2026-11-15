@@ -61,7 +61,6 @@ For starting5pokemon: only use your own screenshots. No Nintendo or Pokémon log
 |---|---|---|
 | `--font-body` | Inter | All the flat pages. |
 | `--font-label` | Micro 5 | Home page menu and small labels (hints, counter). |
-| `--font-loader` | Doto | The loading screen. |
 | `--font-pixel` | Press Start 2P | Cabinet marquees, cabinet screens, the cabinet name label. |
 | `--font-neon` | Tilt Neon | The "Hudson's Arcade" sign. |
 
@@ -94,7 +93,6 @@ src/scene/interior.js      The room: carpet, lamps, neon strips, the row of cabi
 src/scene/cabinet.js       createCabinet(project): builds one cabinet
 src/scene/textures.js      Every texture, painted in code (brick, carpet, marquees, screens)
 src/scene/transitions.js   The camera moves (walking in, zooming into a screen)
-src/scene/loader.js        The loading counter and start button
 
 src/styles/base.css        Colors, fonts, spacing (shared by every page)
 src/styles/nav.css         The menu

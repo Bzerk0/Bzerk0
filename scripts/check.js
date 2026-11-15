@@ -41,8 +41,6 @@ const urlOf = (i) => `/projects/${projects[i].slug}/`;
 const settle = (page) => page.waitForTimeout(750); // lets a cabinet-to-cabinet move finish
 
 async function toStreet(page) {
-  await page.waitForSelector('#start:not([hidden])', { timeout: 15000 });
-  await page.keyboard.press('Enter');
   await state(page, 'outside');
 }
 async function toInside(page) {
@@ -61,20 +59,11 @@ async function swipe(page, fromX, toX, y = 400) {
 
 console.log(`\nChecking ${base}\n`);
 
-await test('loader counts up with real progress and reaches 100%', async () => {
-  const page = await newPage(browser);
-  await page.addInitScript(() => {
-    window.seen = new Set();
-    new MutationObserver(() => {
-      const el = document.getElementById('loader-label');
-      if (el) window.seen.add(el.textContent);
-    }).observe(document, { subtree: true, childList: true, characterData: true });
-  });
-  await page.goto(`${base}/`);
-  await page.waitForSelector('#start:not([hidden])');
-  const seen = await page.evaluate(() => [...window.seen]);
-  assert(seen.includes('LOADING 100%'), `never showed 100%: ${seen}`);
-  assert(seen.length > 5, `counter jumped instead of counting: ${seen}`);
+await test('the street appears on its own: no loading text, no start button', async () => {
+  const page = await open('/');
+  await state(page, 'outside');
+  assert(!(await page.$('#start, #loader-label')), 'the old loading screen is still on the page');
+  await page.waitForSelector('#cover', { state: 'hidden' });
   await page.close();
 });
 
@@ -174,9 +163,9 @@ for (const mobile of [false, true]) {
   });
 }
 
-await test('skip link reaches the portfolio from the loader and from the street', async () => {
+await test('skip link reaches the portfolio while loading and from the street', async () => {
   const page = await open('/');
-  await page.click('#skip'); // loading screen still up
+  await page.click('#skip'); // still loading
   await page.waitForURL('**/portfolio/');
   await page.goto(`${base}/`);
   await toStreet(page);
@@ -185,10 +174,8 @@ await test('skip link reaches the portfolio from the loader and from the street'
   await page.close();
 });
 
-await test('phone: tap starts, swipe walks in, swipe changes cabinet, tap opens', async () => {
+await test('phone: swipe walks in, swipe changes cabinet, tap opens', async () => {
   const page = await open('/', { mobile: true });
-  await page.waitForSelector('#start:not([hidden])');
-  await page.tap('#start');
   await state(page, 'outside');
   await swipe(page, 300, 100);
   await state(page, 'inside');

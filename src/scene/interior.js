@@ -10,15 +10,13 @@ const SPACING = 2; // meters between cabinets
 const ROOM_H = 3.4;
 const WALL_Z = -0.55;
 
-// `step` is called once per project when its image has loaded (it moves the loading counter).
-export async function createInterior({ projects, lite, step }) {
+export async function createInterior({ projects, lite }) {
   const group = new THREE.Group();
   const xOf = (i) => (i - (projects.length - 1) / 2) * SPACING; // where cabinet number i stands
 
   const cabinets = await Promise.all(
     projects.map(async (project, i) => {
       const image = project.image ? await loadImage(project.image) : null;
-      step();
       const cabinet = createCabinet(project, image);
       cabinet.group.position.x = xOf(i);
       group.add(cabinet.group);
