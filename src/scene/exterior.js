@@ -1,19 +1,18 @@
-// The street outside the arcade at night: brick wall, glass doors, neon sign, wet pavement.
-// Everything is placed in meters. x = left/right, y = up, z = toward the visitor. The wall is at z = 0.
+// The street outside the arcade at night: the arcade building, its neon sign, wet pavement.
+// Everything is placed in meters. x = left/right, y = up, z = toward the visitor. The sidewalk starts at z = 0.
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { COLORS } from '../constants.js';
-import { brickTexture, sidewalkTexture, wetAsphaltTexture, glowTexture } from './textures.js';
-import { createNeonSign } from './neonSign.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { sidewalkTexture, wetAsphaltTexture, glowTexture } from './textures.js';
 
-const DOOR_W = 2.2;
-const DOOR_H = 2.4;
+const BUILDING_Z = -7.4; // the model's center; its front steps end at the back edge of the sidewalk
 const CURB_Z = 2.6; // where the sidewalk ends and the street begins
 const STREET_Y = -0.12; // the street sits a little lower than the sidewalk
 
 // `lite` = phones: fewer lights and no mirror under the street.
 // `flicker` = false turns the sign flicker off (reduced motion).
-export function createExterior({ lite, flicker }) {
+export async function createExterior({ lite, flicker }) {
   const group = new THREE.Group();
   const add = (mesh, x = 0, y = 0, z = 0) => {
     mesh.position.set(x, y, z);
@@ -21,85 +20,65 @@ export function createExterior({ lite, flicker }) {
     return mesh;
   };
 
-  // ---- Brick wall, drawn as one outline with a notch for the doorway ----
-  const outline = new THREE.Shape()
-    .moveTo(-30, 0)
-    .lineTo(-DOOR_W / 2, 0)
-    .lineTo(-DOOR_W / 2, DOOR_H)
-    .lineTo(DOOR_W / 2, DOOR_H)
-    .lineTo(DOOR_W / 2, 0)
-    .lineTo(30, 0)
-    .lineTo(30, 14)
-    .lineTo(-30, 14)
-    .closePath();
-  const brick = brickTexture();
-  brick.repeat.set(0.5, 0.5); // one brick tile covers 2 x 2 meters
+  // ---- The building: modeled in Blender (blender/arcade-building.blend) ----
+  const building = await new GLTFLoader().loadAsync('/models/arcade-building.glb');
+  add(building.scene, 0, 0, BUILDING_Z);
+
+  // The doors open by scrubbing the "DoorsOpen" clip that ships inside the model. t: 0 = shut, 1 = open.
+  const mixer = new THREE.AnimationMixer(building.scene);
+  const doorClip = THREE.AnimationClip.findByName(building.animations, 'DoorsOpen');
+  const doorAction = mixer.clipAction(doorClip).play();
+  const setDoors = (t) => {
+    doorAction.time = t * doorClip.duration * 0.999; // just short of the end, where the clip would loop
+    mixer.update(0);
+  };
+  setDoors(0);
+
+  // Warm light from inside, seen once the doors swing open.
   add(
-    new THREE.Mesh(
-      new THREE.ShapeGeometry(outline),
-      new THREE.MeshStandardMaterial({ map: brick, bumpMap: brick, bumpScale: 4, roughness: 0.9 }),
-    ),
-  );
-
-  // ---- Door frame and two glass doors ----
-  const metal = new THREE.MeshStandardMaterial({ color: 0x0b0b10, roughness: 0.45, metalness: 0.7 });
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.1, DOOR_H, 0.2), metal), -DOOR_W / 2 + 0.05, DOOR_H / 2, 0);
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.1, DOOR_H, 0.2), metal), DOOR_W / 2 - 0.05, DOOR_H / 2, 0);
-  add(new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, 0.1, 0.2), metal), 0, DOOR_H - 0.05, 0);
-
-  const glass = new THREE.MeshStandardMaterial({
-    color: 0x1a120a,
-    transparent: true,
-    opacity: 0.5,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
-  });
-  // Each door hangs from a pivot at its outer edge, so rotating the pivot swings the door open.
-  const doors = [-1, 1].map((side) => {
-    const pivot = add(new THREE.Group(), side * (DOOR_W / 2 - 0.1), 0, 0);
-    const h = DOOR_H - 0.1;
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(1, h), glass);
-    panel.position.set(-side * 0.5, h / 2, 0);
-    pivot.add(panel);
-    // metal frame around the glass, plus a push bar: [width, height, x, y]
-    for (const [w, bh, x, y] of [[0.07, h, 0.035, h / 2], [0.07, h, 0.965, h / 2], [1, 0.07, 0.5, h - 0.035], [1, 0.16, 0.5, 0.08], [0.86, 0.05, 0.5, 1.05]]) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, bh, 0.05), metal);
-      bar.position.set(-side * x, y, 0.01);
-      pivot.add(bar);
-    }
-    pivot.userData.openAngle = -side * 1.35; // radians, swinging into the arcade
-    return pivot;
-  });
-
-  // Warm light from inside, seen through the glass.
-  add(
-    new THREE.Mesh(
-      new THREE.PlaneGeometry(8, 5),
-      new THREE.MeshBasicMaterial({ map: glowTexture(COLORS.amber), color: 0x9a9a9a, fog: false }),
-    ),
+    new THREE.Mesh(new THREE.PlaneGeometry(3, 3.4), new THREE.MeshBasicMaterial({ map: glowTexture(COLORS.amber), color: 0x9a9a9a, fog: false })),
     0,
-    0.6,
-    -3,
+    2,
+    BUILDING_Z + 2.9,
   );
 
-  // ---- The sign, and the colored light it throws on the wall and street ----
-  const sign = createNeonSign();
-  add(sign.group, 0, 4.3, 0.12);
-
-  // [color, strength, x, y, z]
-  const lightSpecs = lite
-    ? [[COLORS.magenta, 32, 0, 4.3, 1.6]]
-    : [
-        [COLORS.magenta, 26, -1.4, 4.7, 1.5],
-        [COLORS.cyan, 12, 1.5, 3.5, 1.4],
-      ];
-  const signLights = lightSpecs.map(([color, strength, x, y, z]) => {
-    const light = add(new THREE.PointLight(color, strength, 14, 2), x, y, z);
-    light.userData.strength = strength;
-    return light;
+  // ---- The sign's tubes, and the colored light they throw on the wall and street ----
+  const neon = [];
+  building.scene.getObjectByName('Sign_Neon').traverse((o) => {
+    if (o.material) neon.push({ material: o.material, strength: o.material.emissiveIntensity });
   });
-  add(new THREE.PointLight(COLORS.amber, 7, 7, 2), 0, 1.3, 1.2); // light spilling out of the doors
-  group.add(new THREE.HemisphereLight(0x25223d, 0x000000, 0.35)); // a touch of night sky so nothing is pure black
+  const signLight = add(new THREE.PointLight(0xff5a1e, 0, 24, 2), 0, 4.6, BUILDING_Z + 8);
+  const SIGN_LIGHT = 45;
+  building.scene.getObjectByName('Porch_Light').traverse((o) => o.isLight && (o.intensity *= 5)); // the model's lamp over the door
+  // a little night sky from above, so the roof still reads; the sign stays the main light
+  group.add(new THREE.HemisphereLight(0x5a6aa8, 0x000000, 1.1));
+
+  // Dark ground under and around the building, behind the sidewalk.
+  const lot = add(new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ color: 0x15141a, roughness: 0.9 })), 0, -0.005, -15);
+  lot.rotation.x = -Math.PI / 2;
+  // ...and empty ground out to the horizon, where the fog swallows it.
+  const plain = add(new THREE.Mesh(new THREE.PlaneGeometry(800, 800), new THREE.MeshStandardMaterial({ color: 0x0d0c11, roughness: 0.9 })), 0, STREET_Y - 0.02, 0);
+  plain.rotation.x = -Math.PI / 2;
+
+  // ---- Pixel stars: small square dots on a huge dome around the scene. Never fogged, kept too dim to bloom. ----
+  const stars = new THREE.Group();
+  group.add(stars);
+  const dpr = Math.min(devicePixelRatio, 2);
+  // [how many, size in CSS pixels]
+  for (const [count, px] of lite ? [[350, 1.5], [60, 2.5]] : [[700, 1.5], [120, 3]]) {
+    const position = new Float32Array(count * 3);
+    const color = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const around = Math.random() * Math.PI * 2;
+      const up = THREE.MathUtils.degToRad(1 + Math.random() * 75); // above the horizon only
+      position.set([Math.cos(around) * Math.cos(up) * 300, Math.sin(up) * 300, Math.sin(around) * Math.cos(up) * 300], i * 3);
+      color.fill(0.12 + Math.random() ** 2 * 0.43, i * 3, i * 3 + 3); // mostly faint grey, a few brighter
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(color, 3));
+    stars.add(new THREE.Points(geometry, new THREE.PointsMaterial({ size: px * dpr, sizeAttenuation: false, vertexColors: true, fog: false, depthWrite: false })));
+  }
 
   // ---- Sidewalk, curb, street ----
   const concrete = sidewalkTexture();
@@ -157,9 +136,10 @@ export function createExterior({ lite, flicker }) {
   // Called every frame. `power` goes from 0 (sign off) to 1 (sign on).
   function update(time, power) {
     const brightness = power * flickerAmount(time);
-    sign.setBrightness(brightness);
-    for (const light of signLights) light.intensity = light.userData.strength * brightness;
+    for (const tube of neon) tube.material.emissiveIntensity = tube.strength * (0.03 + brightness);
+    signLight.intensity = SIGN_LIGHT * brightness;
+    if (flicker) stars.rotation.y = time * 0.003; // a very slow drift (off with reduced motion)
   }
 
-  return { group, doors, update };
+  return { group, setDoors, update };
 }

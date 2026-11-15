@@ -31,10 +31,12 @@ export async function createArcade({ canvas, projects, step }) {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
-  scene.fog = new THREE.FogExp2(COLORS.bg, 0.03); // things far away fade into the dark
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 80);
+  const FOG_OUTSIDE = 0.012; // thin outside, so the building shows from far away
+  const FOG_INSIDE = 0.03;
+  scene.fog = new THREE.FogExp2(COLORS.bg, FOG_OUTSIDE); // things far away fade into the dark
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400); // far enough to reach the stars
 
-  const exterior = createExterior({ lite: mobile, flicker: !reduced });
+  const exterior = await createExterior({ lite: mobile, flicker: !reduced });
   const interior = await createInterior({ projects, lite: mobile, step });
   scene.add(exterior.group, interior.group);
 
@@ -49,7 +51,9 @@ export async function createArcade({ canvas, projects, step }) {
   const rig = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
   let aspect = 1;
   // Each "pose" backs the camera up on narrow screens so the subject still fits.
-  const outsidePose = () => ({ pos: { x: 0, y: 1.7, z: Math.min(17, Math.max(10.5, 3.4 / (TAN * aspect))) }, look: { x: 0, y: 2.45, z: 0 } });
+  // The landing view: far down the street, the building small in the middle of the dark.
+  // (it is 13 m wide and 12 m tall, with its front wall at z = -1.4)
+  const outsidePose = () => ({ pos: { x: 0, y: 3, z: 55 }, look: { x: 0, y: 5.5, z: -1.4 } });
   const cabinetPose = (i) => ({ pos: { x: interior.xOf(i), y: 1.35, z: Math.max(4, 0.9 / (TAN * aspect)) }, look: { x: interior.xOf(i), y: 0.85, z: 0 } });
   const screenPose = (i) => ({ pos: { x: interior.xOf(i), y: 1.45, z: 1.05 }, look: { x: interior.xOf(i), y: 1.39, z: 0.07 } });
   const setPose = (pose) => {
@@ -136,6 +140,7 @@ export async function createArcade({ canvas, projects, step }) {
   function arriveInside() {
     exterior.group.visible = false;
     interior.group.visible = true;
+    scene.fog.density = FOG_INSIDE;
     document.body.classList.remove('is-outside');
     hud.prompt.hidden = hud.skip.hidden = true;
     interior.setFocus(index, true);
@@ -147,7 +152,7 @@ export async function createArcade({ canvas, projects, step }) {
     if (state !== 'outside') return;
     setState('busy');
     hud.prompt.hidden = true;
-    enterTransition({ rig, doors: exterior.doors, flash, reduced, swap: arriveInside, inside: cabinetPose(index) }).eventCallback('onComplete', () => {
+    enterTransition({ rig, setDoors: exterior.setDoors, flash, reduced, swap: arriveInside, inside: cabinetPose(index) }).eventCallback('onComplete', () => {
       setState('inside');
       hud.cabinet.hidden = false;
     });
