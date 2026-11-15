@@ -2,42 +2,14 @@
 // Everything is placed in meters. x = left/right, y = up, z = toward the visitor. The cabinet stands at the origin.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { makeCanvas, toTexture } from './textures.js';
 import { createDotField } from './dotField.js';
+import { createScreenDisplay } from './screenDisplay.js';
 
-const PIXEL_FONT = '"Press Start 2P"';
 const GLOW = 0x5b8cff; // the blue-white light a CRT throws
 
-// The attract screen, painted on a canvas. `prompt` = whether "PRESS START" is showing (it blinks).
-function attractScreen(prompt) {
-  const [canvas, g] = makeCanvas(640, 506);
-  const bg = g.createRadialGradient(320, 253, 40, 320, 253, 420);
-  bg.addColorStop(0, '#0d1d52');
-  bg.addColorStop(1, '#02040c');
-  g.fillStyle = bg;
-  g.fillRect(0, 0, 640, 506);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  const line = (text, y, size, color) => {
-    g.font = `${size}px ${PIXEL_FONT}`;
-    g.shadowColor = color;
-    g.shadowBlur = 18;
-    g.fillStyle = color;
-    g.fillText(text, 320, y);
-    g.shadowBlur = 0;
-  };
-  line('HUDSON’S', 190, 56, '#7ff3ff');
-  line('ARCADE', 262, 34, '#ff7be6');
-  if (prompt) line('PRESS START', 380, 24, '#ffffff');
-  g.fillStyle = 'rgba(0, 0, 0, 0.28)'; // scanlines
-  for (let y = 0; y < 506; y += 4) g.fillRect(0, y, 640, 2);
-  const texture = toTexture(canvas);
-  texture.flipY = false; // the model's screen uses glTF texture coordinates
-  return texture;
-}
-
-// `blink` = false keeps "PRESS START" steady (reduced motion).
-export async function createCabinetScene({ blink }) {
+// `blink` = false keeps the screen's prompts steady (reduced motion).
+// `projects` and `touch` are passed on to the screen (see screenDisplay.js).
+export async function createCabinetScene({ blink, projects, touch }) {
   const group = new THREE.Group();
 
   // ---- The cabinet: based on "Defender Arcade" by Delinx, CC BY 4.0 (credited on the page), repainted plain ----
@@ -46,8 +18,8 @@ export async function createCabinetScene({ blink }) {
 
   // ---- Its screen: the model has a separate "Screen" piece; we paint our own picture on it ----
   const screenMesh = gltf.scene.getObjectByName('Screen');
-  const frames = [attractScreen(true), attractScreen(false)];
-  screenMesh.material = new THREE.MeshBasicMaterial({ map: frames[0], fog: false });
+  const display = createScreenDisplay({ projects, touch, blink });
+  screenMesh.material = new THREE.MeshBasicMaterial({ map: display.texture, fog: false });
 
   // Where the screen is and which way it faces, measured from the mesh so the camera can fly straight at it.
   gltf.scene.updateMatrixWorld(true);
@@ -75,13 +47,14 @@ export async function createCabinetScene({ blink }) {
   group.add(field.mesh);
 
   // Called every frame, after the camera has moved. `power` goes from 0 (screen off) to 1 (on).
-  // "PRESS START" blinks about once a second, well under the 3-flashes-a-second safety limit.
-  function update(time, power, camera, renderer) {
-    screenMesh.material.map = frames[blink && Math.floor(time * 1.6) % 2 ? 1 : 0];
-    screenMesh.material.color.setScalar(0.04 + power * 1.7); // above 1 is what the bloom picks up
+  // `close` goes from 0 (across the room) to 1 (right up at the screen): up close the screen is turned
+  // down so its text stays sharp instead of glowing.
+  function update(time, power, camera, renderer, close = 0) {
+    display.update();
+    screenMesh.material.color.setScalar(0.04 + power * (1.7 - 0.75 * close)); // above 1 is what the bloom picks up
     glow.intensity = GLOW_STRENGTH * power;
     field.update(time, power, camera, renderer);
   }
 
-  return { group, screen, update };
+  return { group, screen, display, update };
 }

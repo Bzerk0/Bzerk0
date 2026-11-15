@@ -60,7 +60,7 @@
 .hud {
   position: fixed;
   inset: 0;
-  z-index: 41; /* above the cover, so the skip link is there from the first moment */
+  z-index: 41; /* above the cover */
   pointer-events: none; /* clicks pass through to the canvas... */
 }
 
@@ -69,128 +69,171 @@
   pointer-events: auto; /* ...except on real links and buttons */
 }
 
-.hud__prompt,
-.hud__skip {
-  position: absolute;
-  left: 50%;
-  translate: -50% 0;
-  white-space: nowrap;
-}
-
-.hud__prompt {
-  bottom: 88px;
-  color: var(--text);
-  animation: pulse 2.6s ease-in-out infinite;
-}
-
-.hud__skip {
-  bottom: var(--s3);
-  padding: var(--s2);
-  color: var(--text-dim);
-  text-decoration: none;
-  transition: color 200ms var(--ease);
-}
-
-.hud__skip:hover,
-.hud__skip:focus-visible {
-  color: var(--cyan);
-}
-
-/* ---- The menu on the cabinet's screen ---- */
-.menu {
+/* ---- The project carousel ----
+   The projects are drawn on the cabinet's 3D screen. These are the HTML controls over it.
+   src/scene/arcade.js measures where the screen is in the window and sets
+   --sx, --sy (top-left corner), --sw, --sh (size) on #menu. */
+.carousel {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: var(--s4);
-  padding: var(--s6) var(--s3);
-  /* a lit CRT: blue glow in the middle, darker toward the curved edges, with scanlines on top */
-  background:
-    repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.22) 0 2px, transparent 2px 4px),
-    radial-gradient(ellipse at center, rgb(16 34 88 / 0.97) 0%, rgb(4 9 26 / 0.99) 75%, #000 100%);
-  font-family: var(--font-pixel);
-  text-align: center;
-  pointer-events: auto;
-  animation: screen-on 450ms var(--ease) both;
+  --gap: clamp(6px, 2.5vw, 40px); /* space between the screen and each arrow */
+  --arrow: clamp(44px, 5vw, 64px);
 }
 
-@keyframes screen-on {
-  from {
-    opacity: 0;
-    filter: brightness(2.5);
+/* The screen itself is the link that opens the project showing on it. */
+.carousel__screen {
+  position: absolute;
+  left: var(--sx);
+  top: var(--sy);
+  width: var(--sw);
+  height: var(--sh);
+  border-radius: 12px;
+  touch-action: pan-y; /* horizontal swipes go to the carousel */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.carousel__screen:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 8px;
+}
+
+/* ---- The two arrows, either side of the screen ---- */
+.carousel__arrow {
+  position: absolute;
+  top: calc(var(--sy) + var(--sh) / 2);
+  width: var(--arrow);
+  height: var(--arrow);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  translate: 0 -50%;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 70%, transparent));
+  transition:
+    transform 200ms var(--ease),
+    filter 200ms var(--ease),
+    color 300ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.carousel__arrow--prev {
+  left: calc(var(--sx) - var(--gap) - var(--arrow));
+}
+
+.carousel__arrow--next {
+  left: calc(var(--sx) + var(--sw) + var(--gap));
+}
+
+/* A chunky pixel-art triangle, pointing right; the "previous" one is mirrored. */
+.carousel__arrow span {
+  width: 55%;
+  height: 70%;
+  background: currentColor;
+  clip-path: polygon(0 0, 20% 0, 20% 10%, 40% 10%, 40% 20%, 60% 20%, 60% 30%, 80% 30%, 80% 40%, 100% 40%, 100% 60%, 80% 60%, 80% 70%, 60% 70%, 60% 80%, 40% 80%, 40% 90%, 20% 90%, 20% 100%, 0 100%);
+}
+
+.carousel__arrow--prev span {
+  scale: -1 1;
+}
+
+/* A gentle nudge outward so it reads as "there's more this way". */
+.carousel__arrow--next {
+  animation: nudge-right 1.8s ease-in-out infinite;
+}
+
+.carousel__arrow--prev {
+  animation: nudge-left 1.8s ease-in-out infinite;
+}
+
+@keyframes nudge-right {
+  50% {
+    transform: translateX(5px);
   }
 }
 
-.menu__title {
-  font-size: clamp(0.75rem, 2.2vw, 1rem);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #7ff3ff;
-  text-shadow: 0 0 12px rgb(24 231 255 / 0.7);
+@keyframes nudge-left {
+  50% {
+    transform: translateX(-5px);
+  }
 }
 
-.menu__list {
-  display: grid;
-  gap: var(--s2);
-  width: min(560px, 100%);
-  padding: 0;
-  margin: 0;
-  list-style: none;
+.carousel__arrow:hover,
+.carousel__arrow:focus-visible {
+  animation: none;
+  color: #fff;
+  filter: drop-shadow(0 0 14px var(--accent));
 }
 
-.menu__item {
-  display: grid;
-  gap: var(--s1);
-  padding: var(--s2) var(--s3);
-  border: 2px solid transparent;
-  border-radius: 4px;
-  color: var(--text);
-  text-decoration: none;
+.carousel__arrow--next:hover {
+  transform: translateX(4px);
 }
 
-.menu__item.is-selected {
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+.carousel__arrow--prev:hover {
+  transform: translateX(-4px);
 }
 
-.menu__item:focus-visible {
+.carousel__arrow:active {
+  transform: scale(0.9);
+}
+
+.carousel__arrow:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 0;
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
-.menu__name {
-  font-size: clamp(0.8125rem, 2.6vw, 1.125rem);
-  line-height: 1.5;
-  color: var(--accent);
-}
-
-.menu__item.is-selected .menu__name::before {
-  content: '▶ ';
-}
-
-.menu__tagline {
-  font: 400 0.9375rem / 1.45 var(--font-body);
-  color: var(--text-dim);
-}
-
-.menu__more {
+/* ---- Controls legend, along the bottom of the window ---- */
+.carousel__keys {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s4);
+  translate: -50% 0;
   display: flex;
-  gap: var(--s4);
-  font-size: 0.75rem;
-}
-
-.menu__more a {
-  padding: var(--s1);
-  color: var(--text);
-  text-decoration: none;
-}
-
-.menu__more a:hover {
-  color: var(--cyan);
-}
-
-.menu__hint {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s1) var(--s4);
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--s3));
+  font: 400 1.5rem / 1 var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-dim);
+}
+
+.carousel__keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.carousel__keys kbd {
+  min-width: 1.6em;
+  padding: 3px 6px 1px;
+  border: 1px solid var(--text-dim);
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  font: inherit;
+  text-align: center;
+  color: var(--text);
+}
+
+/* Keyboard keys for mouse/keyboard users, a plain sentence on touch screens. */
+.carousel__keys .for-touch {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .carousel__keys .for-mouse {
+    display: none;
+  }
+
+  .carousel__keys .for-touch {
+    display: inline;
+    text-align: center;
+  }
 }
 
 .hud__credit {
