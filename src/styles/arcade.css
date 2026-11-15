@@ -96,97 +96,114 @@
   color: var(--cyan);
 }
 
-/* ---- Selected cabinet: arrows, label, counter ---- */
-.hud__cabinet {
+/* ---- The menu on the cabinet's screen ---- */
+.menu {
   position: absolute;
-  left: 50%;
-  bottom: var(--s4);
-  translate: -50% 0;
+  inset: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 400px) auto;
-  align-items: center;
-  gap: var(--s2);
-  width: max-content;
-  max-width: calc(100vw - 2 * var(--s2));
-  animation: rise 400ms var(--ease) both;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s4);
+  padding: var(--s6) var(--s3);
+  /* a lit CRT: blue glow in the middle, darker toward the curved edges, with scanlines on top */
+  background:
+    repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.22) 0 2px, transparent 2px 4px),
+    radial-gradient(ellipse at center, rgb(16 34 88 / 0.97) 0%, rgb(4 9 26 / 0.99) 75%, #000 100%);
+  font-family: var(--font-pixel);
+  text-align: center;
+  pointer-events: auto;
+  animation: screen-on 450ms var(--ease) both;
 }
 
-.label {
+@keyframes screen-on {
+  from {
+    opacity: 0;
+    filter: brightness(2.5);
+  }
+}
+
+.menu__title {
+  font-size: clamp(0.75rem, 2.2vw, 1rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7ff3ff;
+  text-shadow: 0 0 12px rgb(24 231 255 / 0.7);
+}
+
+.menu__list {
+  display: grid;
+  gap: var(--s2);
+  width: min(560px, 100%);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.menu__item {
   display: grid;
   gap: var(--s1);
   padding: var(--s2) var(--s3);
-  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(8px);
-  text-align: center;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
   text-decoration: none;
-  transition:
-    border-color 200ms var(--ease),
-    box-shadow 200ms var(--ease);
 }
 
-.label:hover,
-.label:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 32px color-mix(in srgb, var(--accent) 30%, transparent);
+.menu__item.is-selected {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-.label__name {
-  font: 400 0.8125rem / 1.6 var(--font-pixel);
+.menu__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.menu__name {
+  font-size: clamp(0.8125rem, 2.6vw, 1.125rem);
+  line-height: 1.5;
   color: var(--accent);
 }
 
-.label__tagline {
-  font-size: 0.9375rem;
-  line-height: 1.45;
-  color: var(--text);
+.menu__item.is-selected .menu__name::before {
+  content: '▶ ';
 }
 
-.label__cta {
-  margin-top: 4px;
+.menu__tagline {
+  font: 400 0.9375rem / 1.45 var(--font-body);
   color: var(--text-dim);
 }
 
-.label__cta kbd {
-  padding: 3px 7px;
-  border: 1px solid var(--text-dim);
-  border-radius: 4px;
-  font: inherit;
+.menu__more {
+  display: flex;
+  gap: var(--s4);
+  font-size: 0.75rem;
+}
+
+.menu__more a {
+  padding: var(--s1);
   color: var(--text);
+  text-decoration: none;
 }
 
-.hud__arrow {
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(8px);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    border-color 200ms var(--ease),
-    color 200ms var(--ease),
-    opacity 200ms var(--ease);
-}
-
-.hud__arrow:hover:not(:disabled),
-.hud__arrow:focus-visible {
-  border-color: var(--cyan);
+.menu__more a:hover {
   color: var(--cyan);
 }
 
-.hud__arrow:disabled {
-  opacity: 0.3;
-  cursor: default;
+.menu__hint {
+  color: var(--text-dim);
 }
 
-.hud__counter {
-  grid-column: 1 / -1;
-  text-align: center;
+.hud__credit {
+  position: absolute;
+  right: var(--s2);
+  bottom: var(--s1);
+  font-size: 0.6875rem;
   color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.hud__credit a {
+  color: inherit;
 }
 
 [hidden] {
@@ -276,11 +293,4 @@ html:not(.js) .arcade .nav {
     display: inline;
   }
 
-  .label__cta kbd {
-    display: none;
-  }
-
-  .label__cta::before {
-    content: 'Tap ';
-  }
 }

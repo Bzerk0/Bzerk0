@@ -36,17 +36,18 @@ async function open(path, options = {}, fromBrowser = browser) {
 }
 
 const state = (page, name) => page.waitForSelector(`body[data-state="${name}"]`, { timeout: 15000 });
-const selected = (page) => page.$eval('#label', (a) => new URL(a.href).pathname); // the selected cabinet's project URL
+const selected = (page) => page.$eval('#menu .is-selected', (a) => new URL(a.href).pathname); // the selected project's URL
 const urlOf = (i) => `/projects/${projects[i].slug}/`;
-const settle = (page) => page.waitForTimeout(750); // lets a cabinet-to-cabinet move finish
+const settle = (page) => page.waitForTimeout(450); // lets the scroll-wheel throttle pass
+const item = (i) => `#menu-list li:nth-child(${i + 1}) a`;
 
 async function toStreet(page) {
   await state(page, 'outside');
 }
-async function toInside(page) {
+async function toMenu(page) {
   await toStreet(page);
   await page.keyboard.press('Enter');
-  await state(page, 'inside');
+  await state(page, 'menu');
 }
 async function swipe(page, fromX, toX, y = 400) {
   const cdp = await page.context().newCDPSession(page);
@@ -59,7 +60,7 @@ async function swipe(page, fromX, toX, y = 400) {
 
 console.log(`\nChecking ${base}\n`);
 
-await test('the street appears on its own: no loading text, no start button', async () => {
+await test('the cabinet appears on its own: no loading text, no start button', async () => {
   const page = await open('/');
   await state(page, 'outside');
   assert(!(await page.$('#start, #loader-label')), 'the old loading screen is still on the page');
@@ -68,69 +69,77 @@ await test('the street appears on its own: no loading text, no start button', as
 });
 
 for (const trigger of ['Enter', 'Space', 'click', 'scroll']) {
-  await test(`${trigger} walks into the arcade`, async () => {
+  await test(`${trigger} zooms into the screen and opens the menu`, async () => {
     const page = await open('/');
     await toStreet(page);
     if (trigger === 'click') await page.mouse.click(720, 300);
     else if (trigger === 'scroll') await page.mouse.wheel(0, 120);
     else await page.keyboard.press(trigger);
-    await state(page, 'inside');
+    await state(page, 'menu');
     assert.equal(await selected(page), urlOf(0));
     await page.close();
   });
 }
 
-await test('every cabinet is reachable by arrow keys, A/D, scroll, click, and the arrow buttons', async () => {
+await test('every project is reachable in the menu by arrow keys, W/S, scroll and the mouse', async () => {
   const page = await open('/');
-  await toInside(page);
+  await toMenu(page);
   const last = projects.length - 1;
-  // each entry: [how to go forward, how to go back]
+  // each entry: [how to go forward to item i, how to go back to item i]
   const ways = {
-    arrows: [() => page.keyboard.press('ArrowRight'), () => page.keyboard.press('ArrowLeft')],
-    'A/D': [() => page.keyboard.press('d'), () => page.keyboard.press('a')],
+    arrows: [() => page.keyboard.press('ArrowDown'), () => page.keyboard.press('ArrowUp')],
+    'W/S': [() => page.keyboard.press('s'), () => page.keyboard.press('w')],
     scroll: [() => page.mouse.wheel(0, 120), () => page.mouse.wheel(0, -120)],
-    click: [() => page.mouse.click(1203, 400), () => page.mouse.click(237, 400)], // the neighbor on the right / left
-    buttons: [() => page.click('#next'), () => page.click('#prev')],
+    mouse: [(i) => page.hover(item(i)), (i) => page.hover(item(i))],
   };
   for (const [name, [forward, back]] of Object.entries(ways)) {
     for (let i = 1; i <= last; i++) {
-      await forward();
+      await forward(i);
       await settle(page);
-      assert.equal(await selected(page), urlOf(i), `${name}: forward to cabinet ${i + 1}`);
+      assert.equal(await selected(page), urlOf(i), `${name}: forward to project ${i + 1}`);
     }
     for (let i = last - 1; i >= 0; i--) {
-      await back();
+      await back(i);
       await settle(page);
-      assert.equal(await selected(page), urlOf(i), `${name}: back to cabinet ${i + 1}`);
+      assert.equal(await selected(page), urlOf(i), `${name}: back to project ${i + 1}`);
     }
   }
   await page.close();
 });
 
+await test('Escape in the menu zooms back out to the cabinet', async () => {
+  const page = await open('/');
+  await toMenu(page);
+  await page.keyboard.press('Escape');
+  await state(page, 'outside');
+  assert(await page.isVisible('#prompt'), 'prompt shows again');
+  assert.equal(new URL(page.url()).hash, '', 'no project left in the address');
+  await page.close();
+});
+
 for (const [i, project] of projects.entries()) {
-  await test(`cabinet ${i + 1} opens "${project.name}"; Back link, Escape and browser Back return to it`, async () => {
+  await test(`menu item ${i + 1} opens "${project.name}"; Back link, Escape and browser Back return to it`, async () => {
     const page = await open('/');
-    await toInside(page);
-    for (let n = 0; n < i; n++) await page.keyboard.press('ArrowRight');
-    await settle(page);
+    await toMenu(page);
+    for (let n = 0; n < i; n++) await page.keyboard.press('ArrowDown');
     // 1. Enter opens the page, the Back link returns
     await page.keyboard.press('Enter');
     await page.waitForURL(`**${urlOf(i)}`);
     assert.equal(await page.textContent('h1'), project.name);
     await page.click('.back');
-    await state(page, 'inside');
+    await state(page, 'menu');
     assert.equal(await selected(page), urlOf(i), 'Back link');
-    // 2. clicking the cabinet opens it, Escape returns
-    await page.mouse.click(720, 350);
+    // 2. clicking the menu item opens it, Escape returns
+    await page.click(item(i));
     await page.waitForURL(`**${urlOf(i)}`);
     await page.keyboard.press('Escape');
-    await state(page, 'inside');
+    await state(page, 'menu');
     assert.equal(await selected(page), urlOf(i), 'Escape');
-    // 3. the on-screen label opens it, the browser's Back button returns
-    await page.click('#label');
+    // 3. Enter opens it again, the browser's Back button returns
+    await page.keyboard.press('Enter');
     await page.waitForURL(`**${urlOf(i)}`);
     await page.goBack();
-    await state(page, 'inside');
+    await state(page, 'menu');
     assert.equal(await selected(page), urlOf(i), 'browser Back');
     assert.equal(await page.$eval('#flash', (el) => getComputedStyle(el).opacity), '0', 'glow overlay cleared');
     await page.close();
@@ -174,19 +183,13 @@ await test('skip link reaches the portfolio while loading and from the street', 
   await page.close();
 });
 
-await test('phone: swipe walks in, swipe changes cabinet, tap opens', async () => {
+await test('phone: swipe zooms in, tap opens a project', async () => {
   const page = await open('/', { mobile: true });
   await state(page, 'outside');
   await swipe(page, 300, 100);
-  await state(page, 'inside');
-  await swipe(page, 300, 100);
-  await settle(page);
-  assert.equal(await selected(page), urlOf(1), 'swipe left goes to the next cabinet');
-  await swipe(page, 100, 300);
-  await settle(page);
-  assert.equal(await selected(page), urlOf(0), 'swipe right goes back');
-  await page.tap('#label');
-  await page.waitForURL(`**${urlOf(0)}`);
+  await state(page, 'menu');
+  await page.tap(item(1));
+  await page.waitForURL(`**${urlOf(1)}`);
   await page.close();
 });
 
@@ -208,9 +211,9 @@ await test('reduced motion: entry is a short fade (no dolly), and everything sti
   await toStreet(page);
   const started = Date.now();
   await page.keyboard.press('Enter');
-  await state(page, 'inside');
-  assert(Date.now() - started < 1200, `entry took ${Date.now() - started}ms; the camera dolly takes 2400ms`);
-  await page.keyboard.press('ArrowRight');
+  await state(page, 'menu');
+  assert(Date.now() - started < 1200, `entry took ${Date.now() - started}ms; the camera zoom takes 2000ms`);
+  await page.keyboard.press('ArrowDown');
   await page.waitForTimeout(200);
   assert.equal(await selected(page), urlOf(1));
   await page.keyboard.press('Enter');
@@ -221,7 +224,7 @@ await test('reduced motion: entry is a short fade (no dolly), and everything sti
 await test('keyboard only: Tab never lands on something invisible, and focus is always outlined', async () => {
   for (const path of ['/', '/about/', '/contact/']) {
     const page = await open(path);
-    if (path === '/') await toInside(page);
+    if (path === '/') await toMenu(page);
     for (let i = 0; i < 14; i++) {
       await page.keyboard.press('Tab');
       const info = await page.evaluate(() => {

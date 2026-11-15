@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Hudson's Arcade | Hudson Bjerkness</title>
-  <meta name="description" content="The portfolio of Hudson Bjerkness: an arcade at night where every cabinet is a project.">
+  <meta name="description" content="The portfolio of Hudson Bjerkness: one arcade cabinet in the dark. Step up to the screen to pick a project.">
   <!--head-->
   <link rel="stylesheet" href="/src/styles/arcade.css">
   <!-- Marks that JavaScript is on, before anything is drawn. Without it, the page is the plain 2D landing. -->
@@ -24,18 +24,16 @@
     <p id="prompt" class="hud__prompt mono" hidden><span class="for-mouse">scroll · click · enter</span><span class="for-touch">swipe · tap</span></p>
     <a id="skip" class="hud__skip mono" href="/portfolio/">Skip to site <span aria-hidden="true">→</span></a>
 
-    <div id="cabinet-ui" class="hud__cabinet" hidden>
-      <button id="prev" class="hud__arrow" type="button" aria-label="Previous cabinet">‹</button>
-      <div aria-live="polite">
-        <a id="label" class="label" href="/portfolio/">
-          <span class="label__name"></span>
-          <span class="label__tagline"></span>
-          <span class="label__cta mono"><kbd>Enter</kbd> to play</span>
-        </a>
-      </div>
-      <button id="next" class="hud__arrow" type="button" aria-label="Next cabinet">›</button>
-      <p id="counter" class="hud__counter mono" aria-hidden="true"></p>
-    </div>
+    <!-- The menu on the cabinet's screen, shown once the camera has zoomed in. Projects are added by src/scene/arcade.js. -->
+    <nav id="menu" class="menu" aria-label="Projects" hidden>
+      <p class="menu__title">Select a project</p>
+      <ul id="menu-list" class="menu__list"></ul>
+      <p class="menu__more"><a href="/about/">About</a><a href="/contact/">Contact</a></p>
+      <p class="menu__hint mono"><span class="for-mouse">↑ ↓ choose · enter play · esc back</span><span class="for-touch">tap a project</span></p>
+    </nav>
+
+    <!-- The cabinet model's license (CC BY 4.0) asks for this credit. -->
+    <p class="hud__credit">Cabinet based on <a href="https://sketchfab.com/3d-models/defender-arcade-9e656531a0ea4b6595d2337a4006a552">“Defender Arcade”</a> by <a href="https://sketchfab.com/delinx">Delinx</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, repainted</p>
   </div>
 
   <!-- Full-screen glow used during transitions -->

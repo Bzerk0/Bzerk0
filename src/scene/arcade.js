@@ -1,8 +1,8 @@
 // The 3D experience: sets up Three.js, draws every frame, and reacts to input.
 // It moves through a few states:
 //   'waiting'  still loading (the page is black)
-//   'outside'  on the street, looking at the sign
-//   'inside'   in front of a cabinet
+//   'outside'  looking at the lone cabinet from across the dark room
+//   'menu'     zoomed into its screen, choosing a project
 //   'busy'     a transition is playing (input is ignored)
 import * as THREE from 'three';
 import gsap from 'gsap';
@@ -12,9 +12,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { COLORS } from '../constants.js';
 import { menuIsOpen } from '../ui/nav.js';
-import { createExterior } from './exterior.js';
-import { createInterior } from './interior.js';
-import { enterTransition, openTransition } from './transitions.js';
+import { createCabinetScene } from './cabinetScene.js';
+import { zoomTransition, openTransition } from './transitions.js';
 
 const $ = (id) => document.getElementById(id);
 const FOV = 50;
@@ -31,31 +30,31 @@ export async function createArcade({ canvas, projects }) {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
-  const FOG_OUTSIDE = 0.012; // thin outside, so the building shows from far away
-  const FOG_INSIDE = 0.03;
-  scene.fog = new THREE.FogExp2(COLORS.bg, FOG_OUTSIDE); // things far away fade into the dark
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400); // far enough to reach the stars
+  scene.fog = new THREE.FogExp2(COLORS.bg, 0.045); // the room fades into the dark
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 120);
 
-  const exterior = await createExterior({ lite: mobile, flicker: !reduced });
-  const interior = await createInterior({ projects, lite: mobile });
-  scene.add(exterior.group, interior.group);
+  const room = await createCabinetScene({ blink: !reduced });
+  scene.add(room.group);
 
-  // ---- Bloom: makes anything brighter than white glow (the neon). HTML text is never affected. ----
+  // ---- Bloom: makes anything brighter than white glow (the screen). HTML text is never affected. ----
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: mobile ? 0 : 4 }));
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.4, 0.6)); // strength, radius, threshold
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.55, 0.6)); // strength, radius, threshold
   composer.addPass(new OutputPass());
   let useBloom = true;
 
   // ---- Camera rig: where the camera stands and what it looks at ----
   const rig = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
   let aspect = 1;
-  // Each "pose" backs the camera up on narrow screens so the subject still fits.
-  // The landing view: far down the street, the building small in the middle of the dark.
-  // (it is 13 m wide and 12 m tall, with its front wall at z = -1.4)
-  const outsidePose = () => ({ pos: { x: 0, y: 3, z: 55 }, look: { x: 0, y: 5.5, z: -1.4 } });
-  const cabinetPose = (i) => ({ pos: { x: interior.xOf(i), y: 1.35, z: Math.max(4, 0.9 / (TAN * aspect)) }, look: { x: interior.xOf(i), y: 0.85, z: 0 } });
-  const screenPose = (i) => ({ pos: { x: interior.xOf(i), y: 1.45, z: 1.05 }, look: { x: interior.xOf(i), y: 1.39, z: 0.07 } });
+  // The landing view: across the room, the cabinet small in the middle of the dark.
+  const outsidePose = () => ({ pos: { x: 0, y: 1.5, z: 8 }, look: { x: 0, y: 1.05, z: 0 } });
+  // Straight in front of the screen, close enough that it fills the window. `push` < 1 goes closer still.
+  const screenPose = (push = 1) => {
+    const { center, normal, width, height } = room.screen;
+    const distance = Math.min(height / 2 / TAN, width / 2 / (TAN * aspect)) * 0.97 * push;
+    const pos = center.clone().addScaledVector(normal, distance);
+    return { pos: { x: pos.x, y: pos.y, z: pos.z }, look: { x: center.x, y: center.y, z: center.z } };
+  };
   const setPose = (pose) => {
     rig.pos.copy(pose.pos);
     rig.look.copy(pose.look);
@@ -64,8 +63,8 @@ export async function createArcade({ canvas, projects }) {
   let state = 'waiting';
   // Also written to <body data-state="..."> so CSS and the test script can see it.
   const setState = (next) => (document.body.dataset.state = state = next);
-  let index = 0; // which cabinet is selected
-  let signPower = 0; // 0 = sign off, 1 = on
+  let index = 0; // which project is selected in the menu
+  let power = 0; // the screen: 0 = off, 1 = on
   let time = 0;
 
   function resize() {
@@ -75,7 +74,7 @@ export async function createArcade({ canvas, projects }) {
     composer.setSize(innerWidth, innerHeight);
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
-    if (state === 'inside') setPose(cabinetPose(index));
+    if (state === 'menu') setPose(screenPose());
     else if (state !== 'busy') setPose(outsidePose());
   }
   addEventListener('resize', resize);
@@ -89,15 +88,14 @@ export async function createArcade({ canvas, projects }) {
     timer.update();
     const dt = Math.min(timer.getDelta(), 0.1);
     time += dt;
-    if (exterior.group.visible) exterior.update(time, signPower);
-
     camera.position.copy(rig.pos);
     if (state === 'outside' && !reduced) {
-      // idle sway: a slow drift so the street feels alive
-      camera.position.x += Math.sin(time * 0.3) * 0.2;
-      camera.position.y += Math.sin(time * 0.23) * 0.06;
+      // idle sway: a slow drift so the room feels alive
+      camera.position.x += Math.sin(time * 0.3) * 0.15;
+      camera.position.y += Math.sin(time * 0.23) * 0.05;
     }
     camera.lookAt(rig.look);
+    room.update(time, power, camera, renderer);
 
     if (useBloom) composer.render(dt);
     else renderer.render(scene, camera);
@@ -109,12 +107,7 @@ export async function createArcade({ canvas, projects }) {
       if (frames === 90 && slowFrames > 45) useBloom = false;
     }
   }
-  // Warm up: compile all the shaders now so the first transition is smooth.
-  // (Once per scene, because each one has its own set of lights.)
-  exterior.group.visible = false;
-  await renderer.compileAsync(scene, camera);
-  exterior.group.visible = true;
-  interior.group.visible = false;
+  // Warm up: compile the shaders now so the first frame is smooth.
   await renderer.compileAsync(scene, camera);
   renderer.setAnimationLoop(frame);
   // Stop drawing while the tab is in the background.
@@ -122,28 +115,39 @@ export async function createArcade({ canvas, projects }) {
 
   // ---- On-screen text (plain HTML on top of the canvas) ----
   const flash = $('flash');
-  const hud = { prompt: $('prompt'), skip: $('skip'), cabinet: $('cabinet-ui'), label: $('label'), prev: $('prev'), next: $('next'), counter: $('counter') };
+  const hud = { prompt: $('prompt'), skip: $('skip'), menu: $('menu'), list: $('menu-list') };
 
-  function showCabinetInfo() {
-    const p = projects[index];
-    hud.label.href = `/projects/${p.slug}/`;
-    hud.label.style.setProperty('--accent', p.accent);
-    hud.label.querySelector('.label__name').textContent = p.name;
-    hud.label.querySelector('.label__tagline').textContent = p.tagline;
-    hud.counter.textContent = `${index + 1} / ${projects.length}`;
-    hud.prev.disabled = index === 0;
-    hud.next.disabled = index === projects.length - 1;
-    history.replaceState(null, '', `#${p.slug}`); // so Back / reload returns to this cabinet
+  // The menu: one link per project, built from projects.json.
+  const items = projects.map((p, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<a class="menu__item" href="/projects/${p.slug}/"><span class="menu__name"></span><span class="menu__tagline"></span></a>`;
+    const a = li.firstElementChild;
+    a.style.setProperty('--accent', p.accent);
+    a.querySelector('.menu__name').textContent = p.name;
+    a.querySelector('.menu__tagline').textContent = p.tagline;
+    a.addEventListener('pointerenter', () => state === 'menu' && select(i));
+    a.addEventListener('focus', () => select(i, false));
+    a.addEventListener('click', (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return; // open-in-new-tab still works normally
+      e.preventDefault();
+      open(i);
+    });
+    hud.list.append(li);
+    return a;
+  });
+
+  function select(i, moveFocus = true) {
+    index = THREE.MathUtils.clamp(i, 0, projects.length - 1);
+    items.forEach((a, n) => a.classList.toggle('is-selected', n === index));
+    if (moveFocus && document.activeElement !== items[index]) items[index].focus({ preventScroll: true });
+    history.replaceState(null, '', `#${projects[index].slug}`); // so Back / reload returns to this project
   }
 
-  function arriveInside() {
-    exterior.group.visible = false;
-    interior.group.visible = true;
-    scene.fog.density = FOG_INSIDE;
-    document.body.classList.remove('is-outside');
+  function showMenu() {
     hud.prompt.hidden = hud.skip.hidden = true;
-    interior.setFocus(index, true);
-    showCabinetInfo();
+    hud.menu.hidden = false;
+    select(index);
+    setState('menu');
   }
 
   // ---- Actions ----
@@ -151,28 +155,33 @@ export async function createArcade({ canvas, projects }) {
     if (state !== 'outside') return;
     setState('busy');
     hud.prompt.hidden = true;
-    enterTransition({ rig, setDoors: exterior.setDoors, flash, reduced, swap: arriveInside, inside: cabinetPose(index) }).eventCallback('onComplete', () => {
-      setState('inside');
-      hud.cabinet.hidden = false;
+    zoomTransition({ rig, flash, reduced, to: screenPose(), done: showMenu });
+  }
+
+  function leave() {
+    if (state !== 'menu') return;
+    setState('busy');
+    hud.menu.hidden = true;
+    history.replaceState(null, '', location.pathname);
+    zoomTransition({
+      rig,
+      flash,
+      reduced,
+      to: outsidePose(),
+      done: () => {
+        hud.prompt.hidden = hud.skip.hidden = false;
+        setState('outside');
+      },
     });
   }
 
-  function focus(i) {
-    i = THREE.MathUtils.clamp(i, 0, projects.length - 1);
-    if (state !== 'inside' || i === index) return;
-    index = i;
-    interior.setFocus(index);
-    showCabinetInfo();
-    const { pos } = cabinetPose(index);
-    gsap.to([rig.pos, rig.look], { x: pos.x, duration: reduced ? 0 : 0.7, ease: 'power3.out', overwrite: true });
-  }
-
-  function open() {
-    if (state !== 'inside') return;
+  function open(i) {
+    if (state !== 'menu') return;
+    select(i);
     setState('busy');
-    hud.cabinet.hidden = true;
+    hud.menu.hidden = true;
     const p = projects[index];
-    openTransition({ rig, flash, reduced, screen: screenPose(index), accent: p.accent, done: () => (location.href = `/projects/${p.slug}/`) });
+    openTransition({ rig, flash, reduced, screen: screenPose(0.35), accent: p.accent, done: () => (location.href = `/projects/${p.slug}/`) });
   }
 
   // ---- Input ----
@@ -183,51 +192,38 @@ export async function createArcade({ canvas, projects }) {
     if (state === 'outside' && press && !onControl) {
       e.preventDefault();
       enter();
-    } else if (state === 'inside') {
-      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') focus(index + 1);
-      else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') focus(index - 1);
-      else if (e.key === 'Enter' && !onControl) open();
+    } else if (state === 'menu') {
+      const key = e.key.toLowerCase();
+      if (key === 'arrowdown' || key === 's') select(index + 1);
+      else if (key === 'arrowup' || key === 'w') select(index - 1);
+      else if (key === 'escape') leave();
+      else if (e.key === 'Enter' && !onControl) open(index);
+      else return;
+      e.preventDefault();
     }
   });
 
-  // Scroll wheel: one cabinet per scroll gesture.
+  // Scroll wheel: on the landing it zooms in; in the menu, one project per scroll gesture.
   let lastWheel = 0;
   addEventListener(
     'wheel',
     (e) => {
       if (menuIsOpen()) return;
-      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
       if (state === 'outside') {
         lastWheel = e.timeStamp;
         enter();
-      } else if (Math.abs(delta) > 4 && e.timeStamp - lastWheel > 600) {
+      } else if (state === 'menu' && Math.abs(e.deltaY) > 4 && e.timeStamp - lastWheel > 400) {
         lastWheel = e.timeStamp;
-        focus(index + Math.sign(delta));
+        select(index + Math.sign(e.deltaY));
       }
     },
     { passive: true },
   );
 
-  // Which cabinet is under the mouse / finger? (-1 = none)
-  const raycaster = new THREE.Raycaster();
-  function cabinetAt(e) {
-    raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-    const hit = raycaster.intersectObjects(interior.cabinets.map((c) => c.hitBox))[0];
-    return hit ? interior.cabinets.findIndex((c) => c.hitBox === hit.object) : -1;
-  }
+  canvas.addEventListener('click', () => state === 'outside' && enter());
+  canvas.addEventListener('pointermove', () => (canvas.style.cursor = state === 'outside' ? 'pointer' : ''));
 
-  canvas.addEventListener('click', (e) => {
-    if (state === 'outside') return enter();
-    if (state !== 'inside') return;
-    const hit = cabinetAt(e);
-    if (hit === index) open();
-    else if (hit >= 0) focus(hit);
-  });
-  canvas.addEventListener('pointermove', (e) => {
-    canvas.style.cursor = state === 'outside' || (state === 'inside' && cabinetAt(e) >= 0) ? 'pointer' : '';
-  });
-
-  // Touch: swipe left/right to change cabinet; any swipe on the street walks in.
+  // Touch: any swipe in the room zooms in. In the menu, links are tapped normally.
   let touchStart = null;
   canvas.addEventListener('touchstart', (e) => (touchStart = e.changedTouches[0]), { passive: true });
   canvas.addEventListener(
@@ -236,49 +232,38 @@ export async function createArcade({ canvas, projects }) {
       const dx = e.changedTouches[0].clientX - touchStart.clientX;
       const dy = e.changedTouches[0].clientY - touchStart.clientY;
       if (state === 'outside' && Math.hypot(dx, dy) > 30) enter();
-      else if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) focus(index + (dx < 0 ? 1 : -1));
     },
     { passive: true },
   );
 
-  hud.prev.addEventListener('click', () => focus(index - 1));
-  hud.next.addEventListener('click', () => focus(index + 1));
-  hud.label.addEventListener('click', (e) => {
-    if (e.ctrlKey || e.metaKey || e.shiftKey) return; // open-in-new-tab still works normally
-    e.preventDefault();
-    open();
-  });
-
-  // Coming back with the browser's Back button can restore this page mid-zoom. Put it back in front of the cabinet.
+  // Coming back with the browser's Back button can restore this page mid-zoom. Put it back on the menu.
   addEventListener('pageshow', (e) => {
     if (!e.persisted || state !== 'busy') return;
     gsap.set(flash, { opacity: 0 });
-    setPose(cabinetPose(index));
-    hud.cabinet.hidden = false;
-    setState('inside');
+    setPose(screenPose());
+    showMenu();
   });
 
   // ---- Start. Called by main.js once everything has loaded. ----
-  // With a project slug (coming back from a project page) we go straight to that cabinet.
+  // With a project slug (coming back from a project page) we go straight to the menu, on that project.
   function begin(slug) {
+    document.body.classList.add('is-outside');
     const startIndex = projects.findIndex((p) => p.slug === slug);
     if (startIndex >= 0) {
       index = startIndex;
-      arriveInside();
-      setPose(cabinetPose(index));
-      hud.cabinet.hidden = false;
-      setState('inside');
+      power = 1;
+      setPose(screenPose());
+      showMenu();
       return;
     }
-    document.body.classList.add('is-outside');
     hud.prompt.hidden = false;
     setPose(outsidePose());
     setState('busy');
-    // The sign powers on: a quick stutter, then steady. Input unlocks once it is lit.
-    const power = { value: 0 };
-    const tl = gsap.timeline({ onUpdate: () => (signPower = power.value), onComplete: () => (setState('outside')) });
-    if (reduced) tl.set(power, { value: 1 }).to({}, { duration: 0.4 });
-    else tl.to(power, { value: 1, duration: 0.06 }, 0.3).to(power, { value: 0.2, duration: 0.06 }, 0.45).to(power, { value: 1, duration: 0.5, ease: 'power2.out' }, 0.62);
+    // The screen warms up: a quick stutter, then steady. Input unlocks once it is lit.
+    const warm = { value: 0 };
+    const tl = gsap.timeline({ onUpdate: () => (power = warm.value), onComplete: () => setState('outside') });
+    if (reduced) tl.set(warm, { value: 1 }).to({}, { duration: 0.4 });
+    else tl.to(warm, { value: 1, duration: 0.06 }, 0.3).to(warm, { value: 0.2, duration: 0.06 }, 0.45).to(warm, { value: 1, duration: 0.5, ease: 'power2.out' }, 0.62);
   }
 
   return { begin };
